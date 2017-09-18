@@ -44,7 +44,7 @@ nclasses = 2
 filter_size = 2
 pid_train = np.array(['0329','0364','0417'])#, '0424', '0450', '0473', '0485','0493', '0494', '0495', '0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591'])
 if onSharcnet == 1:
-    datapath = 'DataCNNScarNorm/' #for sharcnet work directory
+    datapath = '../DataCNNScarNorm/' #for sharcnet work directory
 else:
     datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
     
