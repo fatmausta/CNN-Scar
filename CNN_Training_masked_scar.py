@@ -32,27 +32,32 @@ import sys
 
 #PARAMETERS TO ADJUST
 patch_size = 1
-window_size = 5
-epochs = 30
+window_size = 7
+epochs = 100
 skip = 4
-modelname= 'CNN_scar_1.h5'
+modelname= 'CNN_scar_2.h5'
 onSharcnet = 1
+
 #desired ratio of true positives, for scar in this case
-desired_scar_ratio = 0.30
-scar_definition = 0.75
+desired_ratio_balance = 0.30
+scar_definition_ratio = 0.75
 nclasses = 2 
-filter_size = 2
-pid_train = np.array(['0329','0364','0417'])#, '0424', '0450', '0473', '0485','0493', '0494', '0495', '0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591'])
+filter_size = 3
+pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495', '0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591'])
+#datapath = 'DataCNNScarNorm/' #for sharcnet work directory
+datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
+randomly_drop = 0
+datapopfraction = 0.80
 if onSharcnet == 1:
     datapath = '../DataCNNScarNorm/' #for sharcnet work directory
 else:
     datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
-    
+
 #TRAINING
 patchsize_sq = np.square(patch_size)
 windowsize_sq = np.square(window_size)
 numpy.random.seed(windowsize_sq-1)
-def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition):  
+def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition_ratio):  
     pads = []
     LGE_patches_scar = []
     LGE_windows_scar = []
@@ -81,7 +86,11 @@ def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, sca
         w_pad=patch_size-(w_LGE%patch_size)      
         h_pad=patch_size-(h_LGE%patch_size)    
         pads.append((h_pad,w_pad))
-        all_slice = range(0, d_LGE, skip)#15,5)#30,60,2)   
+        r1 = range(0, int(d_LGE/6), 1)
+        r2 = range(int(d_LGE/6), int(d_LGE*5/6), skip)        
+        r3 = range(int(d_LGE*5/6),d_LGE ,1)
+        all_slice = list(r1) + list(r2) + list(r3)  
+#        all_slice = range(0, d_LGE, skip)#15,5)#30,60,2)   
 #        sl=35
         for sl in all_slice:   
             #pad your images            
@@ -110,7 +119,7 @@ def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, sca
     LGE_windows_arr = np.asarray(LGE_windows_arr)
     #1) SEPERATE SCAR FROM BACKGROUND
     for r in range(0,len(LGE_patches_arr)):
-        if(np.sum(LGE_patches_arr[r])>=patchsize_sq*scar_definition):#scar 
+        if(np.sum(LGE_patches_arr[r])>=patchsize_sq*scar_definition_ratio):#scar 
             LGE_patches_scar.append(LGE_patches_arr[r])
             LGE_windows_scar.append(LGE_windows_arr[r])
         else: #background
@@ -123,7 +132,7 @@ def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, sca
     #2) CALCULATE AMOUNT OF DATA TO BE DROPPED
     ratio_imbalance = len(LGE_patches_scar)/(len(LGE_patches_arr)) 
     #formula to decide how many samples to drop 
-    controlled_datapopnumber = (desired_scar_ratio-ratio_imbalance)*len(LGE_patches_arr)/desired_scar_ratio                       
+    controlled_datapopnumber = (desired_ratio_balance-ratio_imbalance)*len(LGE_patches_arr)/desired_ratio_balance                       
     if controlled_datapopnumber>0 and controlled_datapopnumber<len(LGE_patches_bg):
         if len(LGE_patches_bg)>len(LGE_patches_scar):
             print('too little scar samples, deleting from bg samples')
@@ -151,7 +160,7 @@ def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, sca
     #calculate the label values for the patches
     LGE_patches_label = np.empty(LGE_patches_arr.shape[0])
     for p in range(0,len(LGE_patches_arr)):            
-        if numpy.sum(LGE_patches_arr[p])/patchsize_sq>=scar_definition:
+        if numpy.sum(LGE_patches_arr[p])/patchsize_sq>=scar_definition_ratio:
             label=numpy.reshape(1, (1,1))
         else:
             label=numpy.reshape(0, (1,1))
@@ -193,12 +202,12 @@ def runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasse
     X_training /= 255
     Y_training = np_utils.to_categorical(Y_training, nclasses)
     model = Sequential()
-    model.add(Convolution2D(16, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
+    model.add(Convolution2D(64, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
     model.add(Dropout(0.2))
-    model.add(Convolution2D(32, filter_size, filter_size, activation='relu'))
+    model.add(Convolution2D(128, filter_size, filter_size, activation='relu'))
     model.add(MaxPooling2D(pool_size=(1,1)))
     model.add(Flatten())
-    model.add(Dense(64, activation='relu'))
+    model.add(Dense(256, activation='relu'))
     model.add(Dropout(0.5))
     model.add(Dense(nclasses, activation='softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
@@ -210,7 +219,7 @@ def runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasse
     return y_pred_scaled_cropped
 
 #to do a rough segmentation, save the ,model
-(dataset_training, pads) = PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition)
+(dataset_training, pads) = PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition_ratio)
 y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasses, datapath)
 
 #to do a finer segmentation, save the mpodel
