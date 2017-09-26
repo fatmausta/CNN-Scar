@@ -32,32 +32,34 @@ import sys
 
 #PARAMETERS TO ADJUST
 patch_size = 1
-window_size = 7
-epochs = 100
+windowsize = range(7,9,2)
+epochs = 50
 skip = 4
-modelname= 'CNN_scar_2.h5'
+#skip2 = 4
+modelname= 'CNN_scar_p7HM_'
 onSharcnet = 1
 
 #desired ratio of true positives, for scar in this case
-desired_ratio_balance = 0.30
-scar_definition_ratio = 0.75
+desired_ratio_balance = 0.2
+scar_definition_ratio = 0.5
 nclasses = 2 
-filter_size = 3
-pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495', '0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591'])
+filtersize = range(2,3)
+pid_train = np.array(['0329','0364','0417', '0424', '0450', '0473', '0485','0493', '0494', '0495'])
+#pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'
 #datapath = 'DataCNNScarNorm/' #for sharcnet work directory
-datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
 randomly_drop = 0
 datapopfraction = 0.80
 if onSharcnet == 1:
-    datapath = '../DataCNNScarNorm/' #for sharcnet work directory
+    datapath = '../HistogramMatching1115/' #for sharcnet work directory
 else:
-    datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
+    datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\HistogramMatching1115\\'
 
 #TRAINING
 patchsize_sq = np.square(patch_size)
-windowsize_sq = np.square(window_size)
+windowsize_sq = np.square(windowsize)
 numpy.random.seed(windowsize_sq-1)
-def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition_ratio):  
+
+def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapath, skip, scar_definition_ratio):  
     pads = []
     LGE_patches_scar = []
     LGE_windows_scar = []
@@ -86,11 +88,11 @@ def PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, sca
         w_pad=patch_size-(w_LGE%patch_size)      
         h_pad=patch_size-(h_LGE%patch_size)    
         pads.append((h_pad,w_pad))
-        r1 = range(0, int(d_LGE/6), 1)
-        r2 = range(int(d_LGE/6), int(d_LGE*5/6), skip)        
-        r3 = range(int(d_LGE*5/6),d_LGE ,1)
-        all_slice = list(r1) + list(r2) + list(r3)  
-#        all_slice = range(0, d_LGE, skip)#15,5)#30,60,2)   
+#        r1 = range(0, int(d_LGE/6), skip2)
+#        r2 = range(int(d_LGE/6), int(d_LGE*5/6), skip)        
+#        r3 = range(int(d_LGE*5/6),d_LGE ,skip2)
+#        all_slice = list(r1) + list(r2) + list(r3)  
+        all_slice = range(0, d_LGE, skip)#15,5)#30,60,2)   
 #        sl=35
         for sl in all_slice:   
             #pad your images            
@@ -182,7 +184,7 @@ def DiceIndex(BW1, BW2):
     DI=DI*100
     return DI
 
-def runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasses, datapath):
+def runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, window_size, filter_size):
     # preprocessing
     X_training = np.zeros((len(dataset_training),windowsize_sq)).astype('int16')
     Y_training = np.zeros((len(dataset_training),1)).astype('int16')
@@ -214,20 +216,17 @@ def runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasse
     model.fit(X_training, Y_training, epochs=epochs, batch_size=100, shuffle=True, verbose = 2)     
     model.summary()
     #save your model
-    model.save(modelname)#path to  save  "C:\Users\fusta\Dropbox\1_Machine_Learning\Machine Learning\KerasNN\Neural_Network_3D_Scar\2D\Data Augmentation\Model.h5"    
+    model.save(modelname + '_w' + str(w) + '_f' + str(f) + '.h5')#path to  save  "C:\Users\fusta\Dropbox\1_Machine_Learning\Machine Learning\KerasNN\Neural_Network_3D_Scar\2D\Data Augmentation\Model.h5"    
     y_pred_scaled_cropped = []#.append(y_pred_scaled[p][:-pads[p+len(pid_train)][0],:-pads[p+len(pid_train)][1]])
     return y_pred_scaled_cropped
 
 #to do a rough segmentation, save the ,model
-(dataset_training, pads) = PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip, scar_definition_ratio)
-y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, window_size, nclasses, datapath)
-
-#to do a finer segmentation, save the mpodel
-#patch_size = 2
-#window_size = 16
-#patchsize_sq = np.square(patch_size)
-#windowsize_sq = np.square(window_size)
-#numpy.random.seed(windowsize_sq-1)
-#modelname= 'CNN_scar_2.h5'
-#(dataset_training, pads) = PatchMaker(patch_size, window_size, nclasses, pid_train, datapath, skip)
-#y_pred_scaled_cropped = runCNNModel(dataset_training, dataset_testing, pads, epochs, patch_size, window_size, nclasses, datapath)
+for w in windowsize:
+  for f in filtersize:
+    w = int(w)
+    f = int(f)
+    windowsize_sq = np.square(w)
+    numpy.random.seed(windowsize_sq-1)
+    
+    (dataset_training, pads) = PatchMaker(patch_size, w, f, nclasses, pid_train, datapath, skip, scar_definition_ratio)
+    y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, w, f)
