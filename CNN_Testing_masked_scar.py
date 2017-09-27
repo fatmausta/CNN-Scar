@@ -33,10 +33,12 @@ modelname=('CNN_scar_p11HM__w7_f2.h5')
 
 patch_size = 1
 window_size = 7
-onSharcnet = 1
-visualize = 0
+onSharcnet = 0 
+visualize = 1
 skip = 1
 pid_test = (['0519', '0515', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
+
+#(['0515', '0529', '0578', '0921', '1076', '1171'])#, '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0601', '0632', '0715'])#, '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171')
 
@@ -202,68 +204,53 @@ def DiceIndex(BW1, BW2):
     DI=DI*100
     return DI
 
+
+def saveResults(y_pred_scaled_cropped, pid, test_slice):
+    scarCNN = sitk.GetImageFromArray(y_pred_scaled_cropped)
+    #remove padding added
+    h_LGE = y_pred_scaled_cropped.shape[1]
+    w_LGE = y_pred_scaled_cropped[2]
+
+    #read full size scarGT
+    scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
+    scar3D = sitk.GetArrayFromImage(scarGT)
+
+    #get header info for scar
+    spacing = np.array(list(scarGT.GetSpacing()))
+    origin = np.array(list(scarGT.GetOrigin()))
+    direction = np.array(list(scarGT.GetDirection()))   
+    [d_LGE, h_LGE, w_LGE] = scar3D.shape
+    
+    SimpleITK.Image.SetOrigin(scarCNN,origin)
+    SimpleITK.Image.SetSpacing(scarCNN,spacing)
+    SimpleITK.Image.SetDirection(scarCNN,direction)
+    SimpleITK.WriteImage(scarCNN, (datapath + pid + '//' + pid + '-scar-CNN.mhd'))
+    
+#    return  sitk.GetImageFromArray(scarGTcomparable), sitk.GetImageFromArray(scarCNNcomparable)
+
+
 Dice_list = []
 ##MAIN SECTION    
 for pid in pid_test:
-    #rough segmentation
     mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
     mask_3D = SimpleITK.GetArrayFromImage(mask) 
     
     (window_size_updated, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
     (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
-    #fine segmentation
-#    modelname=('CNN_scar_2.h5')
-#    patch_size = 2
-#    window_size = 16
-#    patchsize_sq = np.square(patch_size)
-#    windowsize_sq = np.square(window_size)
-#    mask3D = y_pred_scaled_cropped    
-#    (window_size_updated, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-#    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(window_size, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
 
+    #Dice Calculation
     scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
-    scar3D = sitk.GetArrayFromImage(scarGT)
-    scar3D = scar3D[range(0,test_img_shape[0][0], skip),:,:]
+    scarGT = sitk.GetArrayFromImage(scarGT)
+    scarGT = scarGT[range(0,test_img_shape[0][0], skip),:,:]
     BW2 = np.array(y_pred_scaled_cropped)
-    BW2=BW2/255# = y_pred_scaled_cropped
-    BW1 = scar3D
+    BW2=(BW2/255).astype('uint8')# = y_pred_scaled_cropped
+    BW1 = scarGT.astype('uint8')#
     Dice = DiceIndex(BW1, BW2)
     Dice_list.append(Dice)
     print('\nDice for pid %s: %2.3f percent \n\n' %(pid, Dice))
+
+    saveResults(BW2, pid, test_slice)
      
 print(pid_test)
 print(Dice_list)
 print('\nmean Dice over %d training images: %2.3f percent \n\n' %(len(pid_test),np.mean(Dice_list)))
-
-#main function
-#def Main():
-#    for pid in pid_test:
-#    #rough segmentation
-#        mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
-#        mask_3D = SimpleITK.GetArrayFromImage(mask) 
-#        
-#        (dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-#        (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size, nclasses, pid,test_slice)
-#        #fine segmentation
-#        modelname=('CNN_scar_2.h5')
-#        patch_size = 2
-#        window_size = 16
-#        patchsize_sq = np.square(patch_size)
-#        windowsize_sq = np.square(window_size)
-#        mask3D = y_pred_scaled_cropped    
-#        (dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-#        (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size, nclasses, pid,test_slice)
-#    
-#        scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
-#        scar3D = sitk.GetArrayFromImage(scarGT)
-#        scar3D = scar3D[range(0,test_img_shape[0][0], skip),:,:]
-#        BW2 = np.array(y_pred_scaled_cropped)
-#        BW2=BW2/255# = y_pred_scaled_cropped
-#        BW1 = scar3D
-#        Dice = DiceIndex(BW1, BW2)
-#        Dice_list.append(Dice)
-#        print('\nDice for pid %s: %2.3f percent \n\n' %(pid, Dice))
-#     
-#    print(pid_test)
-#    print(Dice_list)
-#    print('\nmean Dice over %d training images: %2.3f percent \n\n' %(len(pid_test),np.mean(Dice_list)))
