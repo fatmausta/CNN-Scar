@@ -175,10 +175,11 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
         LGE_windows = numpy.reshape(LGE_windows,(LGE_windows.shape[0]*LGE_windows.shape[1],window_size,window_size))        
         #for each patches: 
         for p in range(0,len(LGE_patches)):            
-            label=int(numpy.divide(numpy.multiply(numpy.divide(numpy.sum(LGE_patches[p]),numpy.square(patch_size)),nclasses),1))
-            label = numpy.reshape(label, (1,1))           
-            if label==nclasses:
-                label -=1 #mmake sure the range for the classes do not exceed the maximum
+            #label=int(numpy.divide(numpy.multiply(numpy.divide(numpy.sum(LGE_patches[p]),numpy.square(patch_size)),nclasses),1))
+            label = LGE_patches[p]
+			label = numpy.reshape(label, (1,1))           
+ #           if label==nclasses:
+   #             label -=1 #mmake sure the range for the classes do not exceed the maximum
             #making your window  intensities a single row
             intensities = numpy.reshape(LGE_windows[p],(window_size*window_size))
             intensities = numpy.reshape(intensities, (1,window_size*window_size))
