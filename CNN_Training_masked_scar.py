@@ -34,9 +34,9 @@ import sys
 patch_size = 1
 windowsize = range(7,9,2)
 epochs = 1
-skip = 2
+skip = 1
 #skip2 = 4
-modelname= 'CNN_scar_p7HM_'
+modelname= 'CNN_scar_p11HM_'
 onSharcnet = 0
 
 #desired ratio of true positives, for scar in this case
@@ -44,7 +44,7 @@ desired_ratio_balance = 0.2
 scar_definition_ratio = 0.5
 nclasses = 2 
 filtersize = range(2,3)
-pid_train = np.array(['0329','0364','0417', '0424', '0450', '0473', '0485','0493', '0494', '0495'])
+pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'])
 #pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'
 #datapath = 'DataCNNScarNorm/' #for sharcnet work directory
 randomly_drop = 0
@@ -206,7 +206,9 @@ def runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, 
     X_training /= 255
     Y_training = np_utils.to_categorical(Y_training, nclasses)
     model = Sequential()
-    model.add(Convolution2D(64, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
+    model.add(Convolution2D(32, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
+    model.add(Dropout(0.1))
+    model.add(Convolution2D(64, filter_size, filter_size, activation='relu'))
     model.add(Dropout(0.2))
     model.add(Convolution2D(128, filter_size, filter_size, activation='relu'))
     model.add(MaxPooling2D(pool_size=(1,1)))
