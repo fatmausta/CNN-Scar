@@ -33,11 +33,11 @@ import sys
 #PARAMETERS TO ADJUST
 patch_size = 1
 windowsize = range(7,9,2)
-epochs = 50
-skip = 4
+epochs = 1
+skip = 2
 #skip2 = 4
 modelname= 'CNN_scar_p7HM_'
-onSharcnet = 1
+onSharcnet = 0
 
 #desired ratio of true positives, for scar in this case
 desired_ratio_balance = 0.2
@@ -50,9 +50,9 @@ pid_train = np.array(['0329','0364','0417', '0424', '0450', '0473', '0485','0493
 randomly_drop = 0
 datapopfraction = 0.80
 if onSharcnet == 1:
-    datapath = '../HistogramMatching1115/' #for sharcnet work directory
+    datapath = '../DataCNNScarNorm/' #for sharcnet work directory
 else:
-    datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\HistogramMatching1115\\'
+    datapath = 'C:\\Users\\fusta\\Dropbox\\1_Machine_Learning\\DataCNNScarNorm\\'
 
 #TRAINING
 patchsize_sq = np.square(patch_size)
@@ -173,6 +173,8 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     print('\n\nsize of training data %d'%len(training_data))        
     return training_data, pads
     numpy.savetxt('training.csv', training_data ,fmt='%s', delimiter=',' ,newline='\r\n') 
+    
+    
 #Dice Calculation
 def DiceIndex(BW1, BW2):
     BW1 = BW1.astype('float32')

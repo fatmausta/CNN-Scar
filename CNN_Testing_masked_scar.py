@@ -35,7 +35,7 @@ patch_size = 1
 window_size = 7
 onSharcnet = 0 
 visualize = 1
-skip = 20
+skip = 1
 pid_test = (['0515'])#, '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 
 #(['0515', '0529', '0578', '0921', '1076', '1171'])#, '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
@@ -205,14 +205,7 @@ def DiceIndex(BW1, BW2):
     return DI
 
 
-def saveResults(y_pred_multi, pid, test_slice):
-    #scaling the result of CNN algorithm to make it the full size image
-    y_pred_scaled= np.empty((d_LGE,y_pred_multi.shape[0]*patch_size,y_pred_multi.shape[1]*patch_size))
-    for s in range(39, 45):
-        y_pred_scaled[s] =  y_pred_multi[s-39].repeat(patch_size, axis =0).repeat(patch_size, axis =1)
-    #cropping the initial pads before making the patches
-#    y_pred_scaled_cropped= y_pred_scaled[:,:-h_pad,:-w_pad]
-    
+def saveResults(y_pred_scaled_cropped, pid, test_slice):
     scarCNN = sitk.GetImageFromArray(y_pred_scaled_cropped)
     #remove padding added
     h_LGE = y_pred_scaled_cropped.shape[1]
@@ -225,73 +218,38 @@ def saveResults(y_pred_multi, pid, test_slice):
     #get header info for scar
     spacing = np.array(list(scarGT.GetSpacing()))
     origin = np.array(list(scarGT.GetOrigin()))
-    direction = np.array(list(scarGT.GetDirection()))
-    
+    direction = np.array(list(scarGT.GetDirection()))   
     [d_LGE, h_LGE, w_LGE] = scar3D.shape
-    #null unrelated slices on scarGT to make it comparable to the scarCNN, save it
-#    scarGT_empty= np.empty((d_LGE,h_LGE,w_LGE))
-#    
-#    scarGT_empty[range(39,45),:,:]=scarGT[range(39,45),:,:]
-    scarCNN_arr = sitk.GetArrayFromImage(scarCNN)
-
-#    scarGTcomparable = sitk.GetImageFromArray(scarGT_empty)
+    
     SimpleITK.Image.SetOrigin(scarCNN,origin)
     SimpleITK.Image.SetSpacing(scarCNN,spacing)
     SimpleITK.Image.SetDirection(scarCNN,direction)
     SimpleITK.WriteImage(scarCNN, (datapath + pid + '//' + pid + '-scar-CNN.mhd'))
-    #make scar-CNN full size, save it
-#    y_pred_empty= np.empty((d_LGE,h_LGE,w_LGE))
-#    y_pred_empty[range(39,45),:,:]=scarCNN[:,:,:]
-#    scarCNNcomparable = sitk.GetImageFromArray(y_pred_empty)
-#    SimpleITK.Image.SetOrigin(scarCNNcomparable,origin)
-#    SimpleITK.Image.SetSpacing(scarCNNcomparable,spacing)
-#    SimpleITK.Image.SetDirection(scarCNNcomparable,direction)
-#    SimpleITK.WriteImage(scarCNNcomparable, pid + '-scar-CNN-comparable.mhd')
-#    #save predicted image small size
-#    scarCNN = sitk.GetImageFromArray(y_pred_multi)
-#    SimpleITK.Image.SetOrigin(scarCNN,origin)
-#    SimpleITK.Image.SetSpacing(scarCNN,spacing)
-#    SimpleITK.Image.SetDirection(scarCNN,direction)
-#    SimpleITK.WriteImage(scarCNN, pid + '-scar-CNN.mhd')
-#    #save scarGT as samll size
-#    scarGTsmallslice = scar3D[range(39,45),:,:]
-#    scarGTsmallslice = sitk.GetImageFromArray(y_pred_empty)
-#    SimpleITK.Image.SetOrigin(scarGTsmallslice,origin)
-#    SimpleITK.Image.SetSpacing(scarGTsmallslice,spacing)
-#    SimpleITK.Image.SetDirection(scarGTsmallslice,direction)
-#    SimpleITK.WriteImage(scarGTsmallslice, pid + '-scar-CNN.mhd')
     
-    return  sitk.GetImageFromArray(scarGTcomparable), sitk.GetImageFromArray(scarCNNcomparable)
+#    return  sitk.GetImageFromArray(scarGTcomparable), sitk.GetImageFromArray(scarCNNcomparable)
 
 
 Dice_list = []
 ##MAIN SECTION    
 for pid in pid_test:
-    #rough segmentation
     mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
     mask_3D = SimpleITK.GetArrayFromImage(mask) 
     
     (window_size_updated, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
     (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
-    #fine segmentation
-#    modelname=('CNN_scar_2.h5')
-#    patch_size = 2
-#    window_size = 16
-#    patchsize_sq = np.square(patch_size)
-#    windowsize_sq = np.square(window_size)
-#    mask3D = y_pred_scaled_cropped    
-#    (window_size_updated, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-#    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(window_size, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
 
+    #Dice Calculation
     scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
-    scar3D = sitk.GetArrayFromImage(scarGT)
-    scar3D = scar3D[range(0,test_img_shape[0][0], skip),:,:]
+    scarGT = sitk.GetArrayFromImage(scarGT)
+    scarGT = scarGT[range(0,test_img_shape[0][0], skip),:,:]
     BW2 = np.array(y_pred_scaled_cropped)
-    BW2=BW2/255# = y_pred_scaled_cropped
-    BW1 = scar3D
+    BW2=(BW2/255).astype('uint8')# = y_pred_scaled_cropped
+    BW1 = scarGT.astype('uint8')#
     Dice = DiceIndex(BW1, BW2)
     Dice_list.append(Dice)
     print('\nDice for pid %s: %2.3f percent \n\n' %(pid, Dice))
+
+    saveResults(BW2, pid, test_slice)
      
 print(pid_test)
 print(Dice_list)
