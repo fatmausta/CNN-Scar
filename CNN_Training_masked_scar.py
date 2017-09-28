@@ -34,7 +34,7 @@ import sys
 patch_size = 1
 windowsize = range(7,9,2)
 epochs = 1
-skip = 1
+skip = 2
 #skip2 = 4
 modelname= 'CNN_scar_p11HM_'
 onSharcnet = 0
@@ -101,6 +101,7 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
             #patches as blocks 
             LGE_patches = view_as_blocks(scar_padded_slice, block_shape = (patch_size,patch_size))
             LGE_patches = numpy.reshape(LGE_patches,(LGE_patches.shape[0]*LGE_patches.shape[1],patch_size,patch_size))
+
             #pad the images one more time before making windows
             padding = int((window_size - patch_size)/2)
             LGE_padded_slice = numpy.lib.pad(LGE_padded_slice, ((padding,padding),(padding,padding)), 'constant', constant_values=(0,0))
@@ -108,6 +109,14 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
             LGE_windows = view_as_windows(LGE_padded_slice, (window_size,window_size), step=patch_size)
             LGE_windows = numpy.reshape(LGE_windows,(LGE_windows.shape[0]*LGE_windows.shape[1],window_size,window_size))
             LGE_padded_slice=None
+            
+            #USING STRIDE, REMOVE THE OVERLAPPING WINDOWS AND CORRESPONDING PATCHES
+            LGE_patches_sampled = []
+            LGE_windows_sampled = []
+            
+            for s in range(0, len(LGE_patches), stride):
+                LGE_patches_sampled.append(LGE_patches(s))
+                LGE_windows_sampled.append(LGE_windows(s))
             #remove samples from outside of myocardium. 
             rang=[]
             for r in range(0,len(LGE_windows)):
@@ -121,7 +130,7 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     LGE_windows_arr = np.asarray(LGE_windows_arr)
     #1) SEPERATE SCAR FROM BACKGROUND
     for r in range(0,len(LGE_patches_arr)):
-        if(np.sum(LGE_patches_arr[r])>=patchsize_sq*scar_definition_ratio):#scar 
+        if(LGE_patches_arr[p]==1:#scar 
             LGE_patches_scar.append(LGE_patches_arr[r])
             LGE_windows_scar.append(LGE_windows_arr[r])
         else: #background
@@ -162,7 +171,7 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     #calculate the label values for the patches
     LGE_patches_label = np.empty(LGE_patches_arr.shape[0])
     for p in range(0,len(LGE_patches_arr)):            
-        if numpy.sum(LGE_patches_arr[p])/patchsize_sq>=scar_definition_ratio:
+        if LGE_patches_arr[p]==1:
             label=numpy.reshape(1, (1,1))
         else:
             label=numpy.reshape(0, (1,1))
@@ -233,4 +242,4 @@ for w in windowsize:
     numpy.random.seed(windowsize_sq-1)
     
     (dataset_training, pads) = PatchMaker(patch_size, w, f, nclasses, pid_train, datapath, skip, scar_definition_ratio)
-    y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, w, f)
+#    y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, w, f)

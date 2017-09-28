@@ -37,7 +37,7 @@ onSharcnet = 0
 visualize = 1
 skip = 1
 pid_test = (['0519', '0515', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
-
+stride = 2 #times patch size
 #(['0515', '0529', '0578', '0921', '1076', '1171'])#, '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0601', '0632', '0715'])#, '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171')
@@ -51,10 +51,8 @@ patchsize_sq = np.square(patch_size)
 windowsize_sq = np.square(window_size)
 numpy.random.seed(windowsize_sq-1)
 
-def runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid, test_slice):
+def runCNNModel(dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid, test_slice):
     # preprocessing
-    X_training = np.zeros((len(dataset_training),windowsize_sq))
-    Y_training = np.zeros((len(dataset_training),1))
     X_testing = np.zeros((len(dataset_testing),windowsize_sq))
     Y_testing = np.zeros((len(dataset_testing),1))
 
@@ -74,11 +72,8 @@ def runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shap
 
         
     #Reshape my dataset for my model       
-    X_training = X_training.reshape(X_training.shape[0], 1 , window_size, window_size)
     X_testing = X_testing.reshape(X_testing.shape[0], 1, window_size, window_size)
-    X_training = X_training.astype('float32')
     X_testing = X_testing.astype('float32')
-    X_training /= 255
     X_testing /= 255
     Y_training = np_utils.to_categorical(Y_training, nclasses)
     Y_testing = np_utils.to_categorical(Y_testing, nclasses)
@@ -137,12 +132,10 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
     
     LGE = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-LGE-cropped.mhd')
     scar = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
-#    mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
     
     #convert a SimpleITK object into an array
     LGE_3D = SimpleITK.GetArrayFromImage(LGE)
     scar_3D = SimpleITK.GetArrayFromImage(scar) 
-#    mask_3D = SimpleITK.GetArrayFromImage(myomask 
    #masking LGE with GT myo
     LGE_3D = np.multiply(LGE_3D,mask_3D)
 
@@ -151,35 +144,41 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
     d_LGE = LGE_3D.shape[0]
     test_slice = range(0,d_LGE,skip)
 
-    #make windows size and patch size evenly dvideble 
-    if (window_size-patch_size)%2 != 0:
-        window_size +=1 
-        print('window size has changed to %d '%window_size)
     #calculate the amount of padding for heaght and width of a slice for patches
-    rem_w = w_LGE%patch_size
-    w_pad=patch_size-rem_w      
-    rem_h = h_LGE%patch_size
-    h_pad=patch_size-rem_h    
-    pads = (h_pad,w_pad)
+    w_pad=patch_size-(w_LGE%patch_size)      
+    h_pad=patch_size-(h_LGE%patch_size)    
+    pads.append((h_pad,w_pad))
     
     for sl in test_slice:
         LGE_padded_slice=numpy.lib.pad(LGE_3D[sl,:,:], ((0,h_pad),(0,w_pad)), 'constant', constant_values=(0,0))
         scar_padded_slice=numpy.lib.pad(scar_3D[sl,:,:], ((0,h_pad),(0,w_pad)), 'constant', constant_values=(0,0))  
         LGE_patches = view_as_blocks(scar_padded_slice, block_shape = (patch_size,patch_size))
         LGE_patches = numpy.reshape(LGE_patches,(LGE_patches.shape[0]*LGE_patches.shape[1],patch_size,patch_size)) 
-        #re-pad your padded image before you make your windows
+			
+		#re-pad your padded image before you make your windows
         padding = int((window_size - patch_size)/2)
         LGE_repadded_slice = numpy.lib.pad(LGE_padded_slice, ((padding,padding),(padding,padding)), 'constant', constant_values=(0,0))
         #done with the labels, now we will do our windows, 
-        LGE_windows = view_as_windows(LGE_repadded_slice, (window_size,window_size), step=patch_size)
+        LGE_windows = view_as_windows(LGE_repadded_slice, (window_size,window_size), step=stride*patch_size)
         LGE_windows = numpy.reshape(LGE_windows,(LGE_windows.shape[0]*LGE_windows.shape[1],window_size,window_size))        
-        #for each patches: 
+
+        #remove samples from outside of myocardium. 
+        rang=[]
+        for r in range(0,len(LGE_windows)):
+            if(np.sum(LGE_windows[r])==0):
+                rang.append(r)
+        LGE_patches = np.delete(LGE_patches, rang, axis = 0) 
+        LGE_windows = np.delete(LGE_windows, rang, axis = 0)
+        LGE_patches_arr.extend(LGE_patches)
+        LGE_windows_arr.extend(LGE_windows)
+        #    LGE_patches_arr = np.asarray(LGE_patches_arr)
+        #    LGE_windows_arr = np.asarray(LGE_windows_arr)
+            
+        #ASSIGN LABELS FOR for each patches: 
         for p in range(0,len(LGE_patches)):            
             #label=int(numpy.divide(numpy.multiply(numpy.divide(numpy.sum(LGE_patches[p]),numpy.square(patch_size)),nclasses),1))
             label = LGE_patches[p]
-			label = numpy.reshape(label, (1,1))           
- #           if label==nclasses:
-   #             label -=1 #mmake sure the range for the classes do not exceed the maximum
+    			label = numpy.reshape(label, (1,1))           
             #making your window  intensities a single row
             intensities = numpy.reshape(LGE_windows[p],(window_size*window_size))
             intensities = numpy.reshape(intensities, (1,window_size*window_size))
@@ -192,7 +191,7 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
         
     training_data= list(zip(numpy.uint8(window_intensities_training),numpy.uint8(patch_labels_training)))
     testing_data= list(zip(numpy.uint8(window_intensities_testing),numpy.uint8(patch_labels_testing)))  
-    return window_size, training_data, testing_data, test_img_shape, test_img_shape_padded, pads, test_slice
+    return window_size, testing_data, test_img_shape, test_img_shape_padded, pads, test_slice
 
 #Dice Calculation
 def DiceIndex(BW1, BW2):
@@ -236,8 +235,8 @@ for pid in pid_test:
     mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
     mask_3D = SimpleITK.GetArrayFromImage(mask) 
     
-    (window_size_updated, dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_training, dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
+    (window_size_updated, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
+    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
 
     #Dice Calculation
     scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
