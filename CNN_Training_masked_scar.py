@@ -5,50 +5,33 @@ Created on Thu Aug 24 17:53:54 2017
 @author: fusta
 """
 import numpy as np
-import keras
 import SimpleITK
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.utils import np_utils
-from keras.datasets import mnist
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-import scipy
-import matplotlib.pyplot as plt
-# Random Rotations
-from keras.datasets import mnist
-from keras.preprocessing.image import ImageDataGenerator
-from matplotlib import pyplot
-from keras.callbacks import ModelCheckpoint
 from keras import backend as K
 import numpy
-import SimpleITK as sitk
 K.set_image_dim_ordering('th')
 from skimage.util import view_as_windows
 from skimage.util import view_as_blocks
 import random
-import sys
+from keras.layers import Dense, Dropout, Flatten
 
 #PARAMETERS TO ADJUST
 patch_size = 1
 windowsize = range(7,9,2)
-epochs = 1
-skip = 2
+epochs = 20
+skip = 1
 #skip2 = 4
-modelname= 'CNN_scar_p11HM_'
-onSharcnet = 0
-
+modelname= 'CNN_scar_p17HM_'
+onSharcnet = 1
+stride = 2
 #desired ratio of true positives, for scar in this case
 desired_ratio_balance = 0.2
-scar_definition_ratio = 0.5
 nclasses = 2 
 filtersize = range(2,3)
 pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'])
-#pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'
-#datapath = 'DataCNNScarNorm/' #for sharcnet work directory
-randomly_drop = 0
-datapopfraction = 0.80
+
 if onSharcnet == 1:
     datapath = '../DataCNNScarNorm/' #for sharcnet work directory
 else:
@@ -59,7 +42,7 @@ patchsize_sq = np.square(patch_size)
 windowsize_sq = np.square(windowsize)
 numpy.random.seed(windowsize_sq-1)
 
-def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapath, skip, scar_definition_ratio):  
+def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapath, skip):  
     pads = []
     LGE_patches_scar = []
     LGE_windows_scar = []
@@ -68,9 +51,6 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     LGE_patches_arr = []
     LGE_windows_arr = []
     LGE_padded_slice = []
-#    pid = '0329'
-#    pid = '0364'
-#    pid = '0417'
     for pid in pid_train:
         LGE = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-LGE-cropped.mhd')
         scar = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
@@ -88,12 +68,7 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
         w_pad=patch_size-(w_LGE%patch_size)      
         h_pad=patch_size-(h_LGE%patch_size)    
         pads.append((h_pad,w_pad))
-#        r1 = range(0, int(d_LGE/6), skip2)
-#        r2 = range(int(d_LGE/6), int(d_LGE*5/6), skip)        
-#        r3 = range(int(d_LGE*5/6),d_LGE ,skip2)
-#        all_slice = list(r1) + list(r2) + list(r3)  
         all_slice = range(0, d_LGE, skip)#15,5)#30,60,2)   
-#        sl=35
         for sl in all_slice:   
             #pad your images            
             LGE_padded_slice=numpy.lib.pad(LGE_3D[sl,:,:], ((0,h_pad),(0,w_pad)), 'constant', constant_values=(0,0))
@@ -115,22 +90,24 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
             LGE_windows_sampled = []
             
             for s in range(0, len(LGE_patches), stride):
-                LGE_patches_sampled.append(LGE_patches(s))
-                LGE_windows_sampled.append(LGE_windows(s))
+                LGE_patches_sampled.append(LGE_patches[s])
+                LGE_windows_sampled.append(LGE_windows[s])
             #remove samples from outside of myocardium. 
             rang=[]
             for r in range(0,len(LGE_windows)):
                 if(np.sum(LGE_windows[r])==0):
                     rang.append(r)
-            LGE_patches = np.delete(LGE_patches, rang, axis = 0) 
-            LGE_windows = np.delete(LGE_windows, rang, axis = 0)
+            LGE_patches = np.delete(LGE_patches_sampled, rang, axis = 0) 
+            LGE_windows = np.delete(LGE_windows_sampled, rang, axis = 0)
+            
             LGE_patches_arr.extend(LGE_patches)
             LGE_windows_arr.extend(LGE_windows)
     LGE_patches_arr = np.asarray(LGE_patches_arr)
     LGE_windows_arr = np.asarray(LGE_windows_arr)
+    
     #1) SEPERATE SCAR FROM BACKGROUND
     for r in range(0,len(LGE_patches_arr)):
-        if(LGE_patches_arr[p]==1:#scar 
+        if LGE_patches_arr[r]==1:#scar 
             LGE_patches_scar.append(LGE_patches_arr[r])
             LGE_windows_scar.append(LGE_windows_arr[r])
         else: #background
@@ -156,7 +133,8 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
             randomrange=random.sample(range(1, len(LGE_patches_scar)), int(controlled_datapopnumber))
             #delete from scar samples
             LGE_patches_scar = np.delete(LGE_patches_scar, randomrange, axis = 0) 
-            LGE_windows_scar = np.delete(LGE_windows_scar, randomrange, axis = 0)                   
+            LGE_windows_scar = np.delete(LGE_windows_scar, randomrange, axis = 0)      
+             
     #combine left-over desired scar and background patches together
     LGE_patches_arr = np.concatenate((LGE_patches_scar,LGE_patches_bg),axis=0)
     LGE_windows_arr = np.concatenate((LGE_windows_scar,LGE_windows_bg),axis=0)
@@ -164,25 +142,18 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     print('number of bg samples in the training data: %d' % len(LGE_patches_bg))
     print('scar is %d percent of entire data' %  ( len(LGE_patches_scar) / len(LGE_patches_arr)*100))
     print('background is %d percent of entire data' %  ( len(LGE_patches_bg) / len(LGE_patches_arr)*100))    
-    #LGE_patches_scar=None
-    #LGE_patches_bg=None
-    #LGE_windows_scar=None
-    #LGE_windows_bg=None
+#    
     #calculate the label values for the patches
     LGE_patches_label = np.empty(LGE_patches_arr.shape[0])
     for p in range(0,len(LGE_patches_arr)):            
-        if LGE_patches_arr[p]==1:
-            label=numpy.reshape(1, (1,1))
-        else:
-            label=numpy.reshape(0, (1,1))
+        label=numpy.reshape(LGE_patches_arr[p], (1,1))
         LGE_patches_label[p] = label
         #making your window  intensities a single row
     LGE_windows_single_row = numpy.reshape(LGE_windows_arr,(LGE_windows_arr.shape[0], window_size*window_size))  
-    training_data= list(zip(numpy.uint8(LGE_windows_single_row),numpy.uint8(LGE_patches_label)))
-    print('\n\nsize of training data %d'%len(training_data))        
-    return training_data, pads
-    numpy.savetxt('training.csv', training_data ,fmt='%s', delimiter=',' ,newline='\r\n') 
-    
+    dataset_training= list(zip(numpy.uint8(LGE_windows_single_row),numpy.uint8(LGE_patches_label)))
+    print('\n\nsize of training data %d'%len(dataset_training))        
+    return dataset_training, pads
+    numpy.savetxt('training.csv', dataset_training ,fmt='%s', delimiter=',' ,newline='\r\n')
     
 #Dice Calculation
 def DiceIndex(BW1, BW2):
@@ -215,15 +186,14 @@ def runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, 
     X_training /= 255
     Y_training = np_utils.to_categorical(Y_training, nclasses)
     model = Sequential()
-    model.add(Convolution2D(32, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
-    model.add(Dropout(0.1))
-    model.add(Convolution2D(64, filter_size, filter_size, activation='relu'))
-    model.add(Dropout(0.2))
-    model.add(Convolution2D(128, filter_size, filter_size, activation='relu'))
-    model.add(MaxPooling2D(pool_size=(1,1)))
+    model.add(Convolution2D(256, filter_size, filter_size, activation='relu', input_shape=(1,window_size,window_size), dim_ordering='th'))
+    model.add(Convolution2D(256, filter_size, filter_size, activation='relu'))
+    model.add(Dropout(0.4))
+    model.add(Convolution2D(256, filter_size, filter_size, activation='relu'))
+    model.add(Convolution2D(256, filter_size, filter_size, activation='relu'))
     model.add(Flatten())
     model.add(Dense(256, activation='relu'))
-    model.add(Dropout(0.5))
+    model.add(Dropout(0.8))
     model.add(Dense(nclasses, activation='softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     model.fit(X_training, Y_training, epochs=epochs, batch_size=100, shuffle=True, verbose = 2)     
@@ -241,5 +211,5 @@ for w in windowsize:
     windowsize_sq = np.square(w)
     numpy.random.seed(windowsize_sq-1)
     
-    (dataset_training, pads) = PatchMaker(patch_size, w, f, nclasses, pid_train, datapath, skip, scar_definition_ratio)
+    (dataset_training, pads) = PatchMaker(patch_size, w, f, nclasses, pid_train, datapath, skip)
 #    y_pred_scaled_cropped = runCNNModel(dataset_training, pads, epochs, patch_size, nclasses, datapath, w, f)
