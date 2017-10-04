@@ -22,15 +22,15 @@ patch_size = 1
 windowsize = range(7,9,2)
 epochs = 20
 skip = 1
-#skip2 = 4
-modelname= 'CNN_scar_p17HM_'
+modelname= 'CNN_scar_p6HM_'
 onSharcnet = 1
-stride = 2
+stride = 6
 #desired ratio of true positives, for scar in this case
-desired_ratio_balance = 0.2
+desired_scar_ratio = 0.2
+
 nclasses = 2 
 filtersize = range(2,3)
-pid_train = np.array(['0329','0364','0417', '0424', '0450'])#, '0473', '0485','0493', '0494', '0495'])
+pid_train = np.array(['0329','0364','0417', '0424', '0450', '0473', '0485','0493', '0494', '0495'])
 
 if onSharcnet == 1:
     datapath = '../DataCNNScarNorm/' #for sharcnet work directory
@@ -120,7 +120,7 @@ def PatchMaker(patch_size, window_size, filter_size, nclasses, pid_train, datapa
     #2) CALCULATE AMOUNT OF DATA TO BE DROPPED
     ratio_imbalance = len(LGE_patches_scar)/(len(LGE_patches_arr)) 
     #formula to decide how many samples to drop 
-    controlled_datapopnumber = (desired_ratio_balance-ratio_imbalance)*len(LGE_patches_arr)/desired_ratio_balance                       
+    controlled_datapopnumber = (desired_scar_ratio-ratio_imbalance)*len(LGE_patches_arr)/desired_scar_ratio                       
     if controlled_datapopnumber>0 and controlled_datapopnumber<len(LGE_patches_bg):
         if len(LGE_patches_bg)>len(LGE_patches_scar):
             print('too little scar samples, deleting from bg samples')
