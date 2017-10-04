@@ -35,7 +35,7 @@ patch_size = 1
 window_size = 7
 onSharcnet = 1
 visualize = 0
-skip = 1
+skip = 10
 pid_test = (['0519'])#, '0515', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0515', '0519', '0529', '0546', '0562', '0565', '0574', '0578', '0587', '0591' ,'0601', '0632', '0715', '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171'])
 #pid_test = (['0601', '0632', '0715'])#, '0730', '0917', '0921', '0953', '1036', '1073', '1076', '1115', '1166', '1168', '1171')
@@ -49,12 +49,12 @@ patchsize_sq = np.square(patch_size)
 windowsize_sq = np.square(window_size)
 numpy.random.seed(windowsize_sq-1)
 
-def runCNNModel(dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid, test_slice):
+def runCNNModel(dataset_testing, Y_testing_orig , test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid, test_slice, rang):
     # preprocessing
 
     X_testing = np.zeros((len(dataset_testing),windowsize_sq))
     Y_testing = np.zeros((len(dataset_testing),1))
-
+    
     for p in range(0,len(dataset_testing)):
         X_testing[p]=dataset_testing[p][0]
         Y_testing[p]=dataset_testing[p][1]
@@ -86,34 +86,49 @@ def runCNNModel(dataset_testing, test_img_shape, test_img_shape_padded, pads, pa
         
     X_testing = []
     y_testing_multi = []
-    y_pred_scaled = []
-    y_pred_scaled_cropped = []
-    y_pred = np.reshape(y_pred, (len(test_slice), int(test_img_shape_padded[0][0]/patch_size), int(test_img_shape_padded[0][1]/patch_size)))* (255/(nclasses-1))
+    y_pred_cropped = []
+    y_testing_multi_cropped = []
     
-    for sl in range(0,len(test_slice)):
-        y_pred_scaled.append(np.reshape(y_pred[sl].repeat(patch_size, axis =0).repeat(patch_size, axis =1), (1, test_img_shape_padded[0][0], test_img_shape_padded[0][1])))
+   #when patch size > 1 we need to upsample the iamge, now it is useless 
+#    y_pred = np.reshape(y_pred, (len(test_slice), int(test_img_shape_padded[0][0]/patch_size), int(test_img_shape_padded[0][1]/patch_size)))* (255/(nclasses-1))    
+#    for sl in range(0,len(test_slice)):
+#        y_pred_scaled.append(np.reshape(y_pred[sl].repeat(patch_size, axis =0).repeat(patch_size, axis =1), (1, test_img_shape_padded[0][0], test_img_shape_padded[0][1])))
     
-    y_pred_scaled = np.reshape(y_pred_scaled,(len(test_slice), test_img_shape_padded[0][0], test_img_shape_padded[0][1]))    
-    y_testing_multi = (np.reshape(Y_testing, (len(test_slice), int(test_img_shape_padded[0][0]/patch_size), int(test_img_shape_padded[0][1]/patch_size)))* (255/(nclasses-1)))
+    
+    #before rebuilding the image, patch back the pre-deleted areas to predictions (pre-deleted areas were outside of myocardium)
+    y_pred_combined = np.empty((len(test_slice), test_img_shape_padded[0][0], test_img_shape_padded[0][1]))    
+    y=0
+    for c in range(0, len(y_pred_combined)): 
+        if c in rang:
+            y_pred_combined[c] = 0
+        else:
+            y_pred_combined[c] = y_pred[y]
+            y+=1
+
+    y_pred_combined = np.reshape(y_pred_combined,(len(test_slice), test_img_shape_padded[0][0], test_img_shape_padded[0][1]))        
+    y_testing_multi = (np.reshape(Y_testing_orig, (len(test_slice), int(test_img_shape_padded[0][0]/patch_size), int(test_img_shape_padded[0][1]/patch_size)))* (255/(nclasses-1)))
 
     for s in range(0, len(test_slice)):
-        y_pred_scaled_cropped.append(np.reshape(y_pred_scaled[s][:-pads[0],:-pads[1]], (test_img_shape[0][1], test_img_shape[0][2])))
+        y_pred_cropped.append(np.reshape(y_pred_combined[s][:-pads[0],:-pads[1]], (test_img_shape[0][1], test_img_shape[0][2])))
+        y_testing_multi_cropped.append(np.reshape(y_testing_multi[s][:-pads[0],:-pads[1]], (test_img_shape[0][1], test_img_shape[0][2])))
     
-    y_pred_scaled_cropped = np.array(y_pred_scaled_cropped)
-
+    y_pred_cropped = np.array(y_pred_cropped)
+    y_testing_multi_cropped = np.array(y_testing_multi_cropped)
+    
+    
     if visualize == 1:
         for s in range(0, np.int(test_img_shape[0][0]/skip)):
             fig = plt.figure()
             fig.suptitle('pid: %s, slice: %d: \npatch size: %d window size: %d '%(pid, s, patch_size, window_size))
             fig.add_subplot(1,2,1)
-            plt.imshow(y_pred_scaled_cropped[s]) 
+            plt.imshow(y_pred_cropped[s]) 
             plt.figure()
             plt.subplot(1,2,1)
-            plt.imshow(y_pred[s]) 
+            plt.imshow(y_pred_cropped[s]) 
             plt.subplot(1,2,2)            
             plt.imshow(y_testing_multi[s]) 
     
-    return y_pred_scaled_cropped, y_testing_multi 
+    return y_pred_cropped, y_testing_multi 
 
 def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):  
      
@@ -160,6 +175,7 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
         #done with the labels, now we will do our windows, 
         LGE_windows = view_as_windows(LGE_repadded_slice, (window_size,window_size), step=patch_size)
         LGE_windows = numpy.reshape(LGE_windows,(LGE_windows.shape[0]*LGE_windows.shape[1],window_size,window_size))        
+       
         #for each patches: 
         for p in range(0,len(LGE_patches)):            
             label=LGE_patches[p]#int(numpy.divide(numpy.multiply(numpy.divide(numpy.sum(LGE_patches[p]),numpy.square(patch_size)),nclasses),1))
@@ -170,12 +186,21 @@ def PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath):
             patch_labels_testing.append(label)
             window_intensities_testing.append(intensities)
                             
+    Y_testing_orig = patch_labels_testing      
+   #remove samples from outside of myocardium. 
+    rang=[] #keep range for rebuilding full scale iamges
+    for r in range(0,len(window_intensities_testing)):
+        if(np.sum(window_intensities_testing[r])==0):
+            rang.append(r)
+    patch_labels_testing = np.delete(patch_labels_testing, rang, axis = 0) 
+    window_intensities_testing = np.delete(window_intensities_testing, rang, axis = 0)
+    
     print(pid)
     test_img_shape_padded.append(LGE_padded_slice.shape)        #Now, intensities=windows and patches labels will be comboined
     test_img_shape.append(LGE_3D.shape)        #Now, intensities=windows and patches labels will be comboined
         
     testing_data= list(zip(numpy.uint8(window_intensities_testing),numpy.uint8(patch_labels_testing)))  
-    return window_size, testing_data, test_img_shape, test_img_shape_padded, pads, test_slice
+    return window_size, testing_data, Y_testing_orig, test_img_shape, test_img_shape_padded, pads, test_slice, rang
 
 #Dice Calculation
 def DiceIndex(BW1, BW2):
@@ -195,18 +220,18 @@ for pid in pid_test:
     mask = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-myo-cropped.mhd')
     mask_3D = SimpleITK.GetArrayFromImage(mask) 
     
-    (window_size_updated, dataset_testing, test_img_shape, test_img_shape_padded, pads, test_slice) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
-    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_testing, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice)
+    (window_size_updated, dataset_testing, Y_testing_orig, test_img_shape, test_img_shape_padded, pads, test_slice, rang) = PatchMaker(mask_3D, patch_size, window_size, nclasses, pid, datapath)
+    (y_pred_scaled_cropped, y_testing_multi) = runCNNModel(dataset_testing, Y_testing_orig, test_img_shape, test_img_shape_padded, pads, patch_size, window_size_updated, nclasses, pid,test_slice, rang)
 
     scarGT = SimpleITK.ReadImage(datapath + pid + '//' + pid + '-scar-cropped.mhd')
     scarGT = sitk.GetArrayFromImage(scarGT)
     
     scarGT = scarGT[range(0,test_img_shape[0][0], skip),:,:]
+    mask_3D = mask_3D[range(0,test_img_shape[0][0], skip),:,:]
     scarCNN = np.array(y_pred_scaled_cropped)/255
     scarCNN = np.multiply(scarCNN,mask_3D) #masking of the predictions
     
 
-#    BW2=BW2/255# = y_pred_scaled_cropped
     #calculate the scar depth of the ground truth for fair comparison with the predicted scar
     scar_depth = numpy.empty([1,2]).astype('int')
     for sl in range(0, scarGT.shape[0]):
